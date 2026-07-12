@@ -364,6 +364,13 @@ pub async fn initialize_renderer(
     .await
     .unwrap();
 
+    #[cfg(all(target_os = "horizon", feature = "horizon"))]
+    if let Some(provider) = &options.deko3d_wgsl_artifact_provider {
+        device
+            .install_deko3d_wgsl_artifact_provider(provider.clone())
+            .expect("failed to install the Deko3D WGSL artifact provider");
+    }
+
     debug!("Configured wgpu adapter Limits: {:#?}", device.limits());
     debug!("Configured wgpu adapter Features: {:#?}", device.features());
 
