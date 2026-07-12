@@ -219,6 +219,14 @@ pub async fn initialize_renderer(
         &mut additional_vulkan_features,
     );
 
+    #[cfg(all(target_os = "horizon", feature = "horizon"))]
+    let surface = Some(
+        instance
+            .create_surface_deko3d_default(wgpu::Deko3dDefaultSurface)
+            .expect("Failed to create the default Deko3D surface"),
+    );
+
+    #[cfg(not(all(target_os = "horizon", feature = "horizon")))]
     let surface = primary_window.and_then(|wrapper| {
         let maybe_handle = wrapper
             .0
@@ -284,6 +292,11 @@ pub async fn initialize_renderer(
     }
 
     let adapter = selected_adapter.expect(GPU_NOT_FOUND_ERROR_MESSAGE);
+    // Horizon's renderer later creates its one Deko3D surface in WindowRenderPlugin.
+    // The adapter probe surface is only a compatibility hint and must not keep a
+    // second swapchain alive while that render surface is configured.
+    #[cfg(all(target_os = "horizon", feature = "horizon"))]
+    drop(surface);
     let adapter_info = adapter.get_info();
     info!("{:?}", adapter_info);
 

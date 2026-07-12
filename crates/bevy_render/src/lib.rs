@@ -499,6 +499,9 @@ fn send_time(time_sender: Res<TimeSender>) {
 ///
 /// Returns true if creation was successful, false otherwise.
 fn insert_future_resources(render_creation: &RenderCreation, main_world: &mut World) -> bool {
+    #[cfg(all(target_os = "horizon", feature = "horizon"))]
+    let primary_window = None;
+    #[cfg(not(all(target_os = "horizon", feature = "horizon")))]
     let primary_window = main_world
         .query_filtered::<&RawHandleWrapperHolder, With<PrimaryWindow>>()
         .single(main_world)

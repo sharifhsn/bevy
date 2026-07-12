@@ -10,16 +10,16 @@ use bevy_ecs::entity::EntityHashSet;
 use bevy_ecs::{entity::EntityHashMap, prelude::*};
 use bevy_log::{debug, info, warn};
 use bevy_utils::default;
-use bevy_window::{
-    CompositeAlphaMode, PresentMode, PrimaryWindow, RawHandleWrapper, Window, WindowClosing,
-};
+use bevy_window::{CompositeAlphaMode, PresentMode, PrimaryWindow, Window, WindowClosing};
+#[cfg(not(all(target_os = "horizon", feature = "horizon")))]
+use bevy_window::RawHandleWrapper;
 use core::{
     num::NonZero,
     ops::{Deref, DerefMut},
 };
-use wgpu::{
-    SurfaceConfiguration, SurfaceTargetUnsafe, TextureFormat, TextureUsages, TextureViewDescriptor,
-};
+use wgpu::{SurfaceConfiguration, TextureFormat, TextureUsages, TextureViewDescriptor};
+#[cfg(not(all(target_os = "horizon", feature = "horizon")))]
+use wgpu::SurfaceTargetUnsafe;
 
 pub mod screenshot;
 
@@ -50,6 +50,7 @@ impl Plugin for WindowRenderPlugin {
 pub struct ExtractedWindow {
     /// An entity that contains the components in [`Window`].
     pub entity: Entity,
+    #[cfg(not(all(target_os = "horizon", feature = "horizon")))]
     pub handle: RawHandleWrapper,
     pub physical_width: u32,
     pub physical_height: u32,
@@ -122,6 +123,7 @@ impl DerefMut for ExtractedWindows {
     }
 }
 
+#[cfg(not(all(target_os = "horizon", feature = "horizon")))]
 fn extract_windows(
     mut extracted_windows: ResMut<ExtractedWindows>,
     mut closing: Extract<MessageReader<WindowClosing>>,
@@ -188,6 +190,67 @@ fn extract_windows(
             extracted_window.present_mode = window.present_mode;
         }
     }
+
+    for closing_window in closing.read() {
+        extracted_windows.remove(&closing_window.window);
+        window_surfaces.remove(&closing_window.window);
+    }
+    for removed_window in removed.read() {
+        extracted_windows.remove(&removed_window);
+        window_surfaces.remove(&removed_window);
+    }
+}
+
+#[cfg(all(target_os = "horizon", feature = "horizon"))]
+fn extract_windows(
+    mut extracted_windows: ResMut<ExtractedWindows>,
+    mut closing: Extract<MessageReader<WindowClosing>>,
+    windows: Extract<Query<(Entity, &Window, Option<&PrimaryWindow>)>>,
+    mut removed: Extract<RemovedComponents<Window>>,
+    mut window_surfaces: ResMut<WindowSurfaces>,
+) {
+    let mut windows = windows.iter();
+    let Some((entity, window, primary)) = windows.next() else {
+        return;
+    };
+    assert!(
+        windows.next().is_none(),
+        "the Horizon Deko3D renderer supports exactly one window"
+    );
+    assert!(
+        primary.is_some(),
+        "the Horizon Deko3D renderer requires its one window to be primary"
+    );
+    extracted_windows.primary = Some(entity);
+
+    let (new_width, new_height) = (
+        window.resolution.physical_width().max(1),
+        window.resolution.physical_height().max(1),
+    );
+    let extracted_window = extracted_windows.entry(entity).or_insert(ExtractedWindow {
+        entity,
+        physical_width: new_width,
+        physical_height: new_height,
+        present_mode: window.present_mode,
+        desired_maximum_frame_latency: window.desired_maximum_frame_latency,
+        swap_chain_texture: None,
+        swap_chain_texture_view: None,
+        size_changed: false,
+        swap_chain_texture_format: None,
+        swap_chain_texture_view_format: None,
+        present_mode_changed: false,
+        alpha_mode: window.composite_alpha_mode,
+        needs_initial_present: true,
+    });
+    if extracted_window.swap_chain_texture.is_none() {
+        extracted_window.swap_chain_texture_view = None;
+    }
+    extracted_window.size_changed = new_width != extracted_window.physical_width
+        || new_height != extracted_window.physical_height;
+    extracted_window.present_mode_changed = window.present_mode != extracted_window.present_mode;
+    extracted_window.physical_width = new_width;
+    extracted_window.physical_height = new_height;
+    extracted_window.present_mode = window.present_mode;
 
     for closing_window in closing.read() {
         extracted_windows.remove(&closing_window.window);
@@ -369,16 +432,29 @@ pub fn create_surfaces(
     render_adapter: Res<RenderAdapter>,
     render_device: Res<RenderDevice>,
 ) {
+    #[cfg(all(target_os = "horizon", feature = "horizon"))]
+    assert!(
+        windows.windows.len() <= 1,
+        "the Horizon Deko3D renderer supports exactly one window"
+    );
+
     for window in windows.windows.values_mut() {
         let data = window_surfaces
             .surfaces
             .entry(window.entity)
             .or_insert_with(|| {
+                #[cfg(all(target_os = "horizon", feature = "horizon"))]
+                let surface = render_instance
+                    .create_surface_deko3d_default(wgpu::Deko3dDefaultSurface)
+                    .expect("Failed to create the default Deko3D surface");
+
+                #[cfg(not(all(target_os = "horizon", feature = "horizon")))]
                 let surface_target = SurfaceTargetUnsafe::RawHandle {
                     raw_display_handle: Some(window.handle.get_display_handle()),
                     raw_window_handle: window.handle.get_window_handle(),
                 };
                 // SAFETY: The window handles in ExtractedWindows will always be valid objects to create surfaces on
+                #[cfg(not(all(target_os = "horizon", feature = "horizon")))]
                 let surface = unsafe {
                     // NOTE: On some OSes this MUST be called from the main thread.
                     // As of wgpu 0.15, only fallible if the given window is a HTML canvas and obtaining a WebGPU or WebGL2 context fails.

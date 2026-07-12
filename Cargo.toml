@@ -133,6 +133,9 @@ unused_qualifications = "warn"
 [features]
 default = ["2d", "3d", "ui", "audio"]
 
+# PLATFORM: Nintendo Switch Horizon through the local wgpu Deko3D backend.
+horizon = ["bevy_internal/horizon"]
+
 # PROFILE: The default 2D Bevy experience. This includes the core Bevy framework, 2D functionality, scenes and picking.
 2d = ["default_app", "default_platform", "2d_bevy_render", "scene", "picking"]
 
@@ -5540,3 +5543,11 @@ name = "Light Probe Blending"
 description = "Demonstrates blending between multiple reflection probes"
 category = "3D Rendering"
 wasm = false
+
+[patch.crates-io]
+naga = { path = "../wgpu-deko3d-29/naga" }
+wgpu = { path = "../wgpu-deko3d-29/wgpu" }
+wgpu-core = { path = "../wgpu-deko3d-29/wgpu-core" }
+wgpu-hal = { path = "../wgpu-deko3d-29/wgpu-hal" }
+wgpu-naga-bridge = { path = "../wgpu-deko3d-29/wgpu-naga-bridge" }
+wgpu-types = { path = "../wgpu-deko3d-29/wgpu-types" }

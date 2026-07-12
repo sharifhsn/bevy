@@ -69,7 +69,9 @@ pub struct WgpuSettings {
 
 impl Default for WgpuSettings {
     fn default() -> Self {
-        let default_backends = if cfg!(all(
+        let default_backends = if cfg!(all(target_os = "horizon", feature = "horizon")) {
+            Backends::DEKO3D
+        } else if cfg!(all(
             feature = "webgl",
             target_arch = "wasm32",
             not(feature = "webgpu")

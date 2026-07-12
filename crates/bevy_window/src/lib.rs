@@ -44,9 +44,11 @@ pub mod prelude {
     };
 }
 
+#[cfg(not(target_os = "horizon"))]
 use alloc::sync::Arc;
 use bevy_app::prelude::*;
 use bevy_ecs::schedule::IntoScheduleConfigs;
+#[cfg(not(target_os = "horizon"))]
 use bevy_platform::sync::Mutex;
 
 impl Default for WindowPlugin {
@@ -127,10 +129,9 @@ impl Plugin for WindowPlugin {
 
         if let Some(primary_window) = &self.primary_window {
             let mut entity_commands = app.world_mut().spawn(primary_window.clone());
-            entity_commands.insert((
-                PrimaryWindow,
-                RawHandleWrapperHolder(Arc::new(Mutex::new(None))),
-            ));
+            entity_commands.insert(PrimaryWindow);
+            #[cfg(not(target_os = "horizon"))]
+            entity_commands.insert(RawHandleWrapperHolder(Arc::new(Mutex::new(None))));
             if let Some(primary_cursor_options) = &self.primary_cursor_options {
                 entity_commands.insert(primary_cursor_options.clone());
             }
