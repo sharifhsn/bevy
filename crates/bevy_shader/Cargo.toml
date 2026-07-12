@@ -23,6 +23,8 @@ serde = { version = "1", features = ["derive"] }
 thiserror = { version = "2", default-features = false }
 wesl = { version = "0.3.1", optional = true }
 tracing = { version = "0.1", default-features = false, features = ["std"] }
+serde_json = { version = "1", optional = true }
+sha2 = { version = "0.10", optional = true }
 
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -50,6 +52,7 @@ shader_format_wesl = ["wesl"]
 # wgpu-hal = { git = "https://github.com/gfx-rs/wgpu", rev = "..." }
 # wgpu-types = { git = "https://github.com/gfx-rs/wgpu", rev = "..." }
 decoupled_naga = []
+shader_capture = ["naga/wgsl-out", "dep:serde_json", "dep:sha2"]
 
 [lints]
 workspace = true

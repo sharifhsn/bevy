@@ -21,6 +21,8 @@ use bevy_shader::{
     CachedPipelineId, Shader, ShaderCache, ShaderCacheError, ShaderCacheSource, ShaderDefVal,
     ValidateShader,
 };
+#[cfg(feature = "shader_capture")]
+use bevy_shader::{ShaderCaptureContext, ShaderCapturePipeline};
 use bevy_tasks::Task;
 use bevy_utils::default;
 use core::{future::Future, mem};
@@ -491,6 +493,16 @@ impl PipelineCache {
                     id,
                     descriptor.vertex.shader.id(),
                     &descriptor.vertex.shader_defs,
+                    #[cfg(feature = "shader_capture")]
+                    ShaderCaptureContext::new(
+                        ShaderCapturePipeline::RenderVertex,
+                        descriptor.label.as_ref().map(ToString::to_string),
+                        descriptor
+                            .vertex
+                            .entry_point
+                            .as_ref()
+                            .map(ToString::to_string),
+                    ),
                 ) {
                     Ok(module) => module,
                     Err(err) => return Err(err),
@@ -498,7 +510,17 @@ impl PipelineCache {
 
                 let fragment_module = match &descriptor.fragment {
                     Some(fragment) => {
-                        match shader_cache.get(id, fragment.shader.id(), &fragment.shader_defs) {
+                        match shader_cache.get(
+                            id,
+                            fragment.shader.id(),
+                            &fragment.shader_defs,
+                            #[cfg(feature = "shader_capture")]
+                            ShaderCaptureContext::new(
+                                ShaderCapturePipeline::RenderFragment,
+                                descriptor.label.as_ref().map(ToString::to_string),
+                                fragment.entry_point.as_ref().map(ToString::to_string),
+                            ),
+                        ) {
                             Ok(module) => Some(module),
                             Err(err) => return Err(err),
                         }
@@ -595,11 +617,20 @@ impl PipelineCache {
                 let mut shader_cache = shader_cache.lock().unwrap();
                 let mut layout_cache = layout_cache.lock().unwrap();
 
-                let compute_module =
-                    match shader_cache.get(id, descriptor.shader.id(), &descriptor.shader_defs) {
-                        Ok(module) => module,
-                        Err(err) => return Err(err),
-                    };
+                let compute_module = match shader_cache.get(
+                    id,
+                    descriptor.shader.id(),
+                    &descriptor.shader_defs,
+                    #[cfg(feature = "shader_capture")]
+                    ShaderCaptureContext::new(
+                        ShaderCapturePipeline::Compute,
+                        descriptor.label.as_ref().map(ToString::to_string),
+                        descriptor.entry_point.as_ref().map(ToString::to_string),
+                    ),
+                ) {
+                    Ok(module) => module,
+                    Err(err) => return Err(err),
+                };
 
                 let layout = if descriptor.layout.is_empty() && descriptor.immediate_size == 0 {
                     None
@@ -703,6 +734,10 @@ impl PipelineCache {
                 }
                 ShaderCacheError::CreateShaderModule(description) => {
                     error!("failed to create shader module: {}", description);
+                    return;
+                }
+                ShaderCacheError::ShaderCapture(description) => {
+                    error!("failed to capture shader module: {}", description);
                     return;
                 }
             },

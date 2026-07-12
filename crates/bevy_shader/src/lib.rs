@@ -4,6 +4,8 @@ extern crate alloc;
 
 mod shader;
 mod shader_cache;
+#[cfg(all(feature = "shader_capture", not(target_arch = "wasm32")))]
+mod shader_capture;
 pub use shader::*;
 pub use shader_cache::*;
 

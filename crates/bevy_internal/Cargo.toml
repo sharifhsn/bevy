@@ -119,6 +119,7 @@ shader_format_spirv = [
   "bevy_render?/shader_format_spirv",
 ]
 shader_format_wesl = ["bevy_shader/shader_format_wesl"]
+shader_capture = ["bevy_render?/shader_capture", "bevy_shader/shader_capture"]
 
 serialize = [
   "bevy_a11y?/serialize",

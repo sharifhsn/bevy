@@ -1,5 +1,5 @@
 use crate::shader::*;
-use alloc::sync::Arc;
+use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
 use bevy_asset::AssetId;
 use bevy_platform::collections::{hash_map::EntryRef, HashMap, HashSet};
 use core::hash::Hash;
@@ -37,6 +37,54 @@ pub enum ShaderCacheSource<'a> {
 /// An id of a pipeline, typically in the [`PipelineCache`](https://docs.rs/bevy/latest/bevy/render/render_resource/struct.PipelineCache.html)
 /// Typically corresponds to a unique combination of [`Shader`] and [`ShaderDefVal`]s.
 pub type CachedPipelineId = usize;
+
+/// The kind of pipeline requesting a shader module for capture metadata.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ShaderCapturePipeline {
+    /// The vertex stage of a render pipeline.
+    RenderVertex,
+    /// The fragment stage of a render pipeline.
+    RenderFragment,
+    /// A compute pipeline.
+    Compute,
+}
+
+impl ShaderCapturePipeline {
+    #[cfg(all(feature = "shader_capture", not(target_arch = "wasm32")))]
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::RenderVertex => "render_vertex",
+            Self::RenderFragment => "render_fragment",
+            Self::Compute => "compute",
+        }
+    }
+}
+
+/// Stable pipeline metadata recorded with an opt-in shader capture.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ShaderCaptureContext {
+    /// The pipeline kind requesting the module.
+    pub pipeline: ShaderCapturePipeline,
+    /// The descriptor label, when one is supplied.
+    pub pipeline_label: Option<String>,
+    /// The selected entry point, or `None` for the renderer default.
+    pub entry_point: Option<String>,
+}
+
+impl ShaderCaptureContext {
+    /// Creates capture metadata without using transient pipeline cache identifiers.
+    pub fn new(
+        pipeline: ShaderCapturePipeline,
+        pipeline_label: Option<String>,
+        entry_point: Option<String>,
+    ) -> Self {
+        Self {
+            pipeline,
+            pipeline_label,
+            entry_point,
+        }
+    }
+}
 
 struct ShaderData<ShaderModule> {
     pipelines: HashSet<CachedPipelineId>,
@@ -79,6 +127,8 @@ pub struct ShaderCache<ShaderModule, RenderDevice> {
     // The naga composer is only public for providing error messages and should not be touched.
     #[doc(hidden)]
     pub composer: naga_oil::compose::Composer,
+    #[cfg(all(feature = "shader_capture", not(target_arch = "wasm32")))]
+    capture: Result<crate::shader_capture::ShaderCapture, String>,
 }
 
 /// A compile time shader value definition to be inlined into the shader source.
@@ -146,6 +196,9 @@ impl<ShaderModule, RenderDevice> ShaderCache<ShaderModule, RenderDevice> {
             shaders: Default::default(),
             import_path_shaders: Default::default(),
             waiting_on_import: Default::default(),
+            #[cfg(all(feature = "shader_capture", not(target_arch = "wasm32")))]
+            capture: crate::shader_capture::ShaderCapture::from_environment()
+                .map_err(|error| error.to_string()),
         }
     }
 
@@ -194,7 +247,12 @@ impl<ShaderModule, RenderDevice> ShaderCache<ShaderModule, RenderDevice> {
         pipeline: CachedPipelineId,
         id: AssetId<Shader>,
         shader_defs: &[ShaderDefVal],
+        #[cfg(feature = "shader_capture")] capture_context: ShaderCaptureContext,
     ) -> Result<Arc<ShaderModule>, ShaderCacheError> {
+        #[cfg(all(feature = "shader_capture", not(target_arch = "wasm32")))]
+        let capture = &mut self.capture;
+        #[cfg(all(feature = "shader_capture", not(target_arch = "wasm32")))]
+        let capabilities = self.composer.capabilities;
         let shader = self
             .shaders
             .get(&id)
@@ -258,7 +316,16 @@ impl<ShaderModule, RenderDevice> ShaderCache<ShaderModule, RenderDevice> {
                             )
                             .unwrap();
 
-                            ShaderCacheSource::Wgsl(compiled.to_string())
+                            let wgsl = compiled.to_string();
+                            #[cfg(all(feature = "shader_capture", not(target_arch = "wasm32")))]
+                            capture_wgsl(
+                                capture,
+                                wgsl.clone(),
+                                shader_defs.to_vec(),
+                                Vec::new(),
+                                &capture_context,
+                            )?;
+                            ShaderCacheSource::Wgsl(wgsl)
                         } else {
                             panic!("Wesl shaders must be imported from a file");
                         }
@@ -276,7 +343,11 @@ impl<ShaderModule, RenderDevice> ShaderCache<ShaderModule, RenderDevice> {
                         let shader_defs = shader_defs
                             .iter()
                             .chain(shader.shader_defs.iter())
-                            .map(|def| match def.clone() {
+                            .cloned()
+                            .collect::<Vec<_>>();
+                        let mut composer_shader_defs = BTreeMap::new();
+                        for def in &shader_defs {
+                            let (name, value) = match def.clone() {
                                 ShaderDefVal::Bool(k, v) => {
                                     (k, naga_oil::compose::ShaderDefValue::Bool(v))
                                 }
@@ -286,16 +357,20 @@ impl<ShaderModule, RenderDevice> ShaderCache<ShaderModule, RenderDevice> {
                                 ShaderDefVal::UInt(k, v) => {
                                     (k, naga_oil::compose::ShaderDefValue::UInt(v))
                                 }
-                            })
-                            .collect::<std::collections::HashMap<_, _>>();
+                            };
+                            composer_shader_defs.insert(name, value);
+                        }
 
                         let naga = self
                             .composer
                             .make_naga_module(naga_oil::compose::NagaModuleDescriptor {
-                                shader_defs,
+                                shader_defs: composer_shader_defs.into_iter().collect(),
                                 ..shader.into()
                             })
                             .map_err(Box::new)?;
+
+                        #[cfg(all(feature = "shader_capture", not(target_arch = "wasm32")))]
+                        capture_naga(capture, capabilities, &naga, shader_defs, &capture_context)?;
 
                         #[cfg(not(feature = "decoupled_naga"))]
                         {
@@ -407,6 +482,48 @@ impl<ShaderModule, RenderDevice> ShaderCache<ShaderModule, RenderDevice> {
     }
 }
 
+#[cfg(all(feature = "shader_capture", not(target_arch = "wasm32")))]
+fn capture_naga(
+    capture: &mut Result<crate::shader_capture::ShaderCapture, String>,
+    capabilities: naga::valid::Capabilities,
+    module: &naga::Module,
+    shader_defs: Vec<ShaderDefVal>,
+    context: &ShaderCaptureContext,
+) -> Result<(), ShaderCacheError> {
+    let mut validator =
+        naga::valid::Validator::new(naga::valid::ValidationFlags::all(), capabilities);
+    let module_info = validator
+        .validate(module)
+        .map_err(|error| ShaderCacheError::ShaderCapture(error.to_string()))?;
+    let wgsl = naga::back::wgsl::write_string(
+        module,
+        &module_info,
+        naga::back::wgsl::WriterFlags::empty(),
+    )
+    .map_err(|error| ShaderCacheError::ShaderCapture(error.to_string()))?;
+    let entry_points = module
+        .entry_points
+        .iter()
+        .map(|entry_point| (entry_point.name.clone(), entry_point.stage))
+        .collect();
+    capture_wgsl(capture, wgsl, shader_defs, entry_points, context)
+}
+
+#[cfg(all(feature = "shader_capture", not(target_arch = "wasm32")))]
+fn capture_wgsl(
+    capture: &mut Result<crate::shader_capture::ShaderCapture, String>,
+    wgsl: String,
+    shader_defs: Vec<ShaderDefVal>,
+    entry_points: Vec<(String, naga::ShaderStage)>,
+    context: &ShaderCaptureContext,
+) -> Result<(), ShaderCacheError> {
+    capture
+        .as_mut()
+        .map_err(|error| ShaderCacheError::ShaderCapture(error.clone()))?
+        .capture(wgsl, shader_defs, entry_points, context)
+        .map_err(|error| ShaderCacheError::ShaderCapture(error.to_string()))
+}
+
 /// A Wesl import resolver. Maps module paths to actual Wesl shader source.
 #[cfg(feature = "shader_format_wesl")]
 pub struct ShaderResolver<'a> {
@@ -465,4 +582,6 @@ pub enum ShaderCacheError {
     ShaderImportNotYetAvailable,
     #[error("Could not create shader module: {0}")]
     CreateShaderModule(String),
+    #[error("Could not capture shader module: {0}")]
+    ShaderCapture(String),
 }
