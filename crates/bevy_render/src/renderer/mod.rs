@@ -95,12 +95,13 @@ pub fn render_system(
         world.resource_scope(|world, mut windows: Mut<ExtractedWindows>| {
             let views = state.get(world).unwrap();
             for window in windows.values_mut() {
-                let view_needs_present = views.iter().any(|(view_target, camera)| {
-                    matches!(
-                        camera.target,
-                        Some(NormalizedRenderTarget::Window(w)) if w.entity() == window.entity
-                    ) && view_target.needs_present()
-                });
+                let view_needs_present = cfg!(target_os = "horizon")
+                    || views.iter().any(|(view_target, camera)| {
+                        matches!(
+                            camera.target,
+                            Some(NormalizedRenderTarget::Window(w)) if w.entity() == window.entity
+                        ) && view_target.needs_present()
+                    });
 
                 if view_needs_present || window.needs_initial_present {
                     window.present();

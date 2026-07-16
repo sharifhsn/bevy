@@ -129,7 +129,7 @@ impl DeviceErrorHandler {
                 assert!(device_lost.lock().unwrap().replace((reason, str)).is_none());
             });
             device.on_uncaptured_error(Arc::new(move |e| {
-                bevy_log::error!("Caught rendering error: {e}");
+                bevy_log::error!("Caught rendering error: {e:?}");
                 uncaptured
                     .lock()
                     .unwrap()

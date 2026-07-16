@@ -1538,6 +1538,10 @@ pub fn prepare_preprocess_pipelines(
 ) {
     let preprocess_pipelines = preprocess_pipelines.into_inner();
 
+    if !gpu_preprocessing_support.is_available() {
+        return;
+    }
+
     preprocess_pipelines.direct_preprocess.prepare(
         &pipeline_cache,
         &mut specialized_preprocess_pipelines,

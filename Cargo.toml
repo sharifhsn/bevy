@@ -14,6 +14,7 @@ rust-version = "1.95.0"
 
 [workspace]
 resolver = "3"
+workspace.lints = {}
 members = [
   # All of Bevy's official crates are within the `crates` folder!
   "crates/*",
@@ -5546,9 +5547,9 @@ category = "3D Rendering"
 wasm = false
 
 [patch.crates-io]
-naga = { path = "../wgpu-deko3d-29/naga" }
-wgpu = { path = "../wgpu-deko3d-29/wgpu" }
-wgpu-core = { path = "../wgpu-deko3d-29/wgpu-core" }
-wgpu-hal = { path = "../wgpu-deko3d-29/wgpu-hal" }
-wgpu-naga-bridge = { path = "../wgpu-deko3d-29/wgpu-naga-bridge" }
-wgpu-types = { path = "../wgpu-deko3d-29/wgpu-types" }
+naga = { path = "../wgpu/naga" }
+wgpu = { path = "../wgpu/wgpu" }
+wgpu-core = { path = "../wgpu/wgpu-core" }
+wgpu-hal = { path = "../wgpu/wgpu-hal" }
+wgpu-naga-bridge = { path = "../wgpu/wgpu-naga-bridge" }
+wgpu-types = { path = "../wgpu/wgpu-types" }

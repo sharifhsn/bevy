@@ -10,16 +10,16 @@ use bevy_ecs::entity::EntityHashSet;
 use bevy_ecs::{entity::EntityHashMap, prelude::*};
 use bevy_log::{debug, info, warn};
 use bevy_utils::default;
-use bevy_window::{CompositeAlphaMode, PresentMode, PrimaryWindow, Window, WindowClosing};
 #[cfg(not(all(target_os = "horizon", feature = "horizon")))]
 use bevy_window::RawHandleWrapper;
+use bevy_window::{CompositeAlphaMode, PresentMode, PrimaryWindow, Window, WindowClosing};
 use core::{
     num::NonZero,
     ops::{Deref, DerefMut},
 };
-use wgpu::{SurfaceConfiguration, TextureFormat, TextureUsages, TextureViewDescriptor};
 #[cfg(not(all(target_os = "horizon", feature = "horizon")))]
 use wgpu::SurfaceTargetUnsafe;
+use wgpu::{SurfaceConfiguration, TextureFormat, TextureUsages, TextureViewDescriptor};
 
 pub mod screenshot;
 
@@ -317,7 +317,7 @@ pub fn prepare_windows(
         // `handle_uncovered_swap_chains` that triggers a DMA-fence fd leak on
         // Adreno 740 (Quest 3). The exception is windows that still need their
         // initial present (required on Wayland).
-        let is_camera_target = sorted_cameras.0.iter().any(|c| {
+        let is_camera_target = cfg!(target_os = "horizon") || sorted_cameras.0.iter().any(|c| {
             matches!(
                 &c.target,
                 Some(bevy_camera::NormalizedRenderTarget::Window(w)) if w.entity() == window.entity

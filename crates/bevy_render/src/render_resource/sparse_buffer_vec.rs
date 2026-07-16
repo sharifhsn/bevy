@@ -28,7 +28,7 @@ use bevy_shader::Shader;
 use bytemuck::{Pod, Zeroable};
 use encase::ShaderType;
 use weak_table::WeakKeyHashMap;
-use wgpu::{BufferDescriptor, BufferUsages, ComputePassDescriptor, ShaderStages};
+use wgpu::{BufferDescriptor, BufferUsages, ComputePassDescriptor, DownlevelFlags, ShaderStages};
 
 use crate::{
     diagnostic::{DiagnosticsRecorder, RecordDiagnostics as _},
@@ -36,7 +36,7 @@ use crate::{
         AtomicPod, BindGroup, BindGroupEntries, Buffer, PipelineCache, RawBufferVec,
         SpecializedComputePipeline, SpecializedComputePipelines, UniformBuffer,
     },
-    renderer::{RenderDevice, RenderGraph, RenderGraphSystems, RenderQueue},
+    renderer::{RenderAdapter, RenderDevice, RenderGraph, RenderGraphSystems, RenderQueue},
     ExtractSchedule, RenderApp,
 };
 
@@ -277,9 +277,15 @@ fn clear_sparse_buffer_jobs(mut sparse_buffer_update_jobs: ResMut<SparseBufferUp
 impl FromWorld for SparseBufferUpdatePipelines {
     fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
+        let render_adapter = world.resource::<RenderAdapter>();
         let limit = render_device.limits().max_storage_buffers_per_shader_stage;
 
-        if limit < 3 {
+        if limit < 3
+            || !render_adapter
+                .get_downlevel_capabilities()
+                .flags
+                .contains(DownlevelFlags::COMPUTE_SHADERS)
+        {
             info!(
                 "Sparse buffer updates disabled. RenderDevice lacks support: max_storage_buffers_per_shader_stage ({}) < 3.",
                 limit

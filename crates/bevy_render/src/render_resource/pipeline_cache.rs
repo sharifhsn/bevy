@@ -692,6 +692,7 @@ impl PipelineCache {
     }
 
     fn process_pipeline(&mut self, cached_pipeline: &mut CachedPipeline, id: usize) {
+        let pipeline_context = pipeline_error_context(cached_pipeline);
         match &mut cached_pipeline.state {
             CachedPipelineState::Queued => {
                 cached_pipeline.state = match &cached_pipeline.descriptor {
@@ -727,9 +728,12 @@ impl PipelineCache {
                     if std::env::var("VERBOSE_SHADER_ERROR")
                         .is_ok_and(|v| !(v.is_empty() || v == "0" || v == "false"))
                     {
-                        error!("{}", pipeline_error_context(cached_pipeline));
+                        error!("{}", pipeline_context);
                     }
-                    error!("failed to process shader error:\n{}", error_detail);
+                    error!(
+                        "failed to process shader error: {err:?}\n{}\n{}",
+                        pipeline_context, error_detail
+                    );
                     return;
                 }
                 ShaderCacheError::CreateShaderModule(description) => {

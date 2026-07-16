@@ -1357,7 +1357,8 @@ impl FromWorld for GpuPreprocessingSupport {
 
         let adapter_info = RenderAdapterInfo(WgpuWrapper::new(adapter.get_info()));
 
-        let max_supported_mode = if device.limits().max_compute_workgroup_size_x == 0
+        let max_supported_mode = if !downlevel_support
+            || device.limits().max_compute_workgroup_size_x == 0
             || is_non_supported_android_device(&adapter_info)
             || adapter_info.backend == wgpu::Backend::Gl
         {
