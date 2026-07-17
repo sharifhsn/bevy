@@ -6,7 +6,7 @@ use crate::{
 };
 use alloc::borrow::Cow;
 #[cfg(all(target_os = "horizon", feature = "horizon"))]
-use alloc::sync::Arc;
+use alloc::{string::String, sync::Arc};
 use bevy_ecs::world::World;
 use bevy_image::{CompressedImageFormatSupport, CompressedImageFormats};
 use bevy_window::RawHandleWrapperHolder;
@@ -70,6 +70,9 @@ pub struct WgpuSettings {
     /// Trusted offline DKSH resolver installed on the Deko3D device before pipeline creation.
     #[cfg(all(target_os = "horizon", feature = "horizon"))]
     pub deko3d_wgsl_artifact_provider: Option<Arc<dyn wgpu::Deko3dWgslArtifactProvider>>,
+    /// Persistent cache directory for runtime-compiled Deko3D shaders.
+    #[cfg(all(target_os = "horizon", feature = "horizon"))]
+    pub deko3d_shader_cache_directory: Option<String>,
 }
 
 impl Default for WgpuSettings {
@@ -168,6 +171,8 @@ impl Default for WgpuSettings {
             adapter_name: None,
             #[cfg(all(target_os = "horizon", feature = "horizon"))]
             deko3d_wgsl_artifact_provider: None,
+            #[cfg(all(target_os = "horizon", feature = "horizon"))]
+            deko3d_shader_cache_directory: None,
         }
     }
 }

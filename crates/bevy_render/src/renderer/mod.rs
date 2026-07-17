@@ -366,6 +366,11 @@ pub async fn initialize_renderer(
     .unwrap();
 
     #[cfg(all(target_os = "horizon", feature = "horizon"))]
+    if let Some(directory) = &options.deko3d_shader_cache_directory {
+        device.set_deko3d_shader_cache_directory(directory);
+    }
+
+    #[cfg(all(target_os = "horizon", feature = "horizon"))]
     if let Some(provider) = &options.deko3d_wgsl_artifact_provider {
         device
             .install_deko3d_wgsl_artifact_provider(provider.clone())
